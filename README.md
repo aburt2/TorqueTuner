@@ -17,11 +17,14 @@ The hardware is based on the ESP32 microcontroller and the [moteus](https://mjbo
 [Torquetuner OSC Namespace](./Docs/TorquetunerOSC.md)
 
 ## Project Info:
-Project info:
-Project webpage at IDMIL: http://www.idmil.org/project/sustainable-haptic-development/, http://www.idmil.org/project/torquetuner/
+Project webpage at IDMIL: http://www.idmil.org/project/torquetuner/
 Official repository: https://github.com/IDMIL/torquetuner
 
 IDMIL - Input Devices and Music Interaction Laboratory - http://www-new.idmil.org/
+
+Metalab - Society for Arts and Technology - https://sat.qc.ca/fr/recherche/metalab
+
 CIRMMT - Centre for Interdisciplinary Research in Music Media and Technology - http://www.cirmmt.org/
+
 Schulich School of Music - McGill University
 
