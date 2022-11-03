@@ -47,7 +47,7 @@ Figure 4: Moteus board and Adafruit LCD I2C shield screwed onto the top plate of
 3.3V - SCL - SDA - GND
 6. Solder the 3.3V pin to the 3.3V pin on the TinyPico. 
 7. Twist another wire onto the SCL, SDA and GND wires. We will use solder these extra wires onto the LCD shield
-8. Solder wires for SDA, SCL and GND as shown the __Detached Usage__ section on the [Adafruit product page](https://learn.adafruit.com/rgb-lcd-shield/using-the-rgb-lcd-shield).
+8. Solder wires for SDA, SCL, GND and 5V as shown the __Detached Usage__ section on the [Adafruit product page](https://learn.adafruit.com/rgb-lcd-shield/using-the-rgb-lcd-shield).
 9. Solder the 5V wire to the VOUT pin on the 5V regulator
 10. Solder the a wire from the GND pin of the 5V regulator to the other ground pin on the TinyPico. 
 11. Solder the SDA, SCL and GND wires coming from the Moteus board and the LCD Shield onto pins 21, 22 and GND respectively on the TinyPico.

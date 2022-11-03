@@ -77,8 +77,8 @@ For now state should be READY or LISTEN and status ERROR or BUSY (with no other 
 
 #### Open software project and flash it to the Torquetuner
 
-3. Open the Torquetuner firmware project (folder **software** in the Torquetuner repository folder) in VSC/PlatformIO. You can get help on how to use PlatformIO at [https://docs.platformio.org/en/latest/core/quickstart.html](https://docs.platformio.org/en/latest/core/quickstart.html)
-4. You can make any necessary changes on the firmware before flashing (e.g., changing Torquetuner ID)
+3. Open the Torquetuner **software** folder in VSC/PlatformIO. You can get help on how to use PlatformIO at [https://docs.platformio.org/en/latest/core/quickstart.html](https://docs.platformio.org/en/latest/core/quickstart.html)
+4. Open the `config.json` file in the Data folder to make changes before uploading.
 5. If it is the first time flashing, you may see an error pointing to the ESP32 inet.h file. The file requires manual fixing. Check the issue at [https://github.com/mathiasbredholt/libmapper-arduino/issues/3](https://github.com/mathiasbredholt/libmapper-arduino/issues/3)
 
 When ready, you need to flash both the firmware and the filesystem image. Choose the proper platform accordingly (*tinypico*) and use the PlatformIO menu to flash the image to the Torquetuner.
