@@ -9,7 +9,19 @@ TorqueTuner  is  an  embedded  module  that  allows  Digital Musical Instrument 
 The hardware is based on the ESP32 microcontroller and the [moteus](https://mjbots.com/) platform, to implement a force feedback rotary encoder with 3600 PPR ~= 0.1 degree resolution that can display forces up to 45 Ncm (63.7oz.in).
 ## Documentation:
 [Build Guide](./Docs/Build_guide_v1.md)
+
 [Torquetuner Connection Guide](./Docs/connection_guide_v1.md)
+
 [Torquetuner Firmware Update Guide](./Docs/Firmware_update_instructions.md)
+
 [Torquetuner OSC Namespace](./Docs/TorquetunerOSC.md)
+
+## Project Info:
+Project info:
+Project webpage at IDMIL: http://www.idmil.org/project/sustainable-haptic-development/, http://www.idmil.org/project/torquetuner/
+Official repository: https://github.com/IDMIL/torquetuner
+
+IDMIL - Input Devices and Music Interaction Laboratory - http://www-new.idmil.org/
+CIRMMT - Centre for Interdisciplinary Research in Music Media and Technology - http://www.cirmmt.org/
+Schulich School of Music - McGill University
 
