@@ -1,11 +1,4 @@
 # Torquetuner Connection Guide V1.0
-
-- Torquetuner Connection Guide
-    - Option 1: Puara Serial Manager
-        - Set up Puara Serial Manager
-        - Configurer config.json file
-        - Upload to Torquetuner Module
-    - Option 2: Wireless Update
 ## Option 1: Puara Serial Manager
 1. Download or clone the T-Tree repository at https://github.com/IDMIL/T-Tree.
 2. In the client folder open `config_template.json`.
