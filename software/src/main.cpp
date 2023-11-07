@@ -17,6 +17,10 @@ unsigned int firmware_version = 20221020;
 #define VISUAL_FEEDBACK
 // Define libmapper
 #define LIBMAPPER
+// // Define OSC
+// #define OSC
+// Define Debug Flag
+#define DEBUG
 
 #include "Arduino.h"
 #include "variants.h"
@@ -26,6 +30,7 @@ unsigned int firmware_version = 20221020;
 #include <WiFi.h>
 #include <cmath>
 #include <mapper.h>
+#include <numeric>
 //#include "Filter.h"
 #include <Adafruit_RGBLCDShield.h>
 #include <utility/Adafruit_MCP23017.h>
@@ -139,7 +144,7 @@ int CHANGE_STATE(int cur_state, int max_state, int inc_flag) {
   if (new_state < 0) {
     new_state = max_state;
   }
-  printf("New State %d\n",new_state);
+  // printf("New State %d\n",new_state);
   return new_state;
 }
 
@@ -424,48 +429,189 @@ int generic_handler(const char *path, const char *types, lo_arg ** argv,
 
 //*********************TASK SCHEDULING*******************************************//
 // Timing variables
-const uint32_t LIBMAPPER_POLL_RATE = 10000 ; // us
-const uint32_t LIBMAPPER_UPDATE_RATE = 10000 ; // us
-const uint32_t OSC_UPDATE_RATE = 40000 ; // us
-const uint32_t HAPTICS_UPDATE_RATE = 500 ; // 2 KHz
-const uint32_t I2CUPDATE_FREQ = 3400000; // high speed mode;
-const uint32_t GUI_RATE = 66000; //  15 FPS
-const uint32_t INPUT_READ_RATE = 1000; // 1kHz
+const uint32_t LIBMAPPER_POLL_RATE = 2000; // 500Hz
+const uint32_t OSC_UPDATE_RATE = 40000; // 25Hz
+const uint32_t HAPTICS_UPDATE_RATE = 500; // 2KHz
+const uint32_t I2CUPDATE_FREQ = 3400000; // High Speed I2C mode;
+const uint32_t INPUT_READ_RATE = 50000; // 20Hz
+
+// Error variable for I2C error
+int i2c_err = 0;
+
+// timing variables Haptic timing variabls
+int start_time[3] = { 0, 0, 0};
+int end_time[3] = { 0, 0, 0};
+int num_loops = 10000;
+int OSC_loops = 1000;
+int task_delay[3] = { 0, 0, 0};
+int task_dur[3] = { 0, 0, 0};
+std::vector<int> hap_delay = {};
+std::vector<int> lib_delay = {};
+std::vector<int> osc_delay = {};
+std::vector<int> hap_dur  = {};
+std::vector<int> lib_dur  = {};
+std::vector<int> osc_dur  = {};
 
 Scheduler runnerHaptics;
 Scheduler runnerComms;
+
 #ifdef LIBMAPPER
 void pollLibmapper();
-void updateLibmapper();
 #endif
 #ifdef VISUAL_FEEDBACK
 void updateDisplay();
 void readInputs();
 #endif
 void updateHaptics();
-void reconnectWifi();
+#ifdef OSC
 void updateOSC();
+#endif
+#ifdef DEBUG
+bool haptOn();
+bool libtOn();
+bool osctOn();
+void haptOff();
+void libtOff();
+void osctOff();
+#endif
 // Comms Tasks
 #ifdef LIBMAPPER
-Task libmapperPoll (LIBMAPPER_POLL_RATE, TASK_FOREVER, &pollLibmapper, &runnerComms,true);
-Task libmapperUpdate (LIBMAPPER_UPDATE_RATE, TASK_FOREVER, &updateLibmapper, &runnerComms,true);
+  Task libmapperUpdate (LIBMAPPER_POLL_RATE, TASK_FOREVER, &pollLibmapper, &runnerComms,false);
+  #ifdef DEBUG
+    Task libmapperDebug (LIBMAPPER_POLL_RATE, num_loops, &pollLibmapper, &runnerComms,true, &libtOn, &libtOff); // for timing
+  #endif  
 #endif
-Task OSCupdate (OSC_UPDATE_RATE, TASK_FOREVER, &updateOSC, &runnerComms,true);
-
+#ifdef OSC
+  Task OSCupdate (OSC_UPDATE_RATE, TASK_FOREVER, &updateOSC, &runnerComms,false);
+  #ifdef DEBUG
+    Task OSCDebug (OSC_UPDATE_RATE, OSC_loops, &updateOSC, &runnerComms,true, &osctOn, &osctOff); // for timing
+  #endif
+#endif
 // Haptic Tasks
-Task HapticUpdate (HAPTICS_UPDATE_RATE, TASK_FOREVER, &updateHaptics, &runnerHaptics,true);
+Task HapticUpdate (HAPTICS_UPDATE_RATE, TASK_FOREVER, &updateHaptics, &runnerHaptics, false);
+#ifdef DEBUG
+  Task HapticDebug (HAPTICS_UPDATE_RATE, num_loops, &updateHaptics, &runnerHaptics, true, &haptOn, &haptOff); // for timing
+#endif
+
 #ifdef VISUAL_FEEDBACK
-Task DisplayUpdate (GUI_RATE, TASK_FOREVER, &updateDisplay, &runnerHaptics,true);
-Task InputRead (INPUT_READ_RATE,TASK_FOREVER,&readInputs, &runnerHaptics,true);
+Task DisplayUpdate (INPUT_READ_RATE,TASK_FOREVER,&readInputs, &runnerHaptics,true);
 #endif
 //==========Functions for task scheduler===========
+#ifdef DEBUG
+  // Define callbacks for speed profiling
+  bool haptOn() {
+    std::cout << "Start profiling task speed" << std::endl;
+    start_time[0] = micros();
+    end_time[0] = 0;
+
+    return true;
+  }
+
+  void haptOff() {
+      double avg_task_delay = std::accumulate(hap_delay.begin(), hap_delay.end(), 0.0) / hap_delay.size();
+      double sq_sum = std::inner_product(hap_delay.begin(), hap_delay.end(), hap_delay.begin(), 0.0);
+      double std_task_delay = std::sqrt(sq_sum / hap_delay.size() - avg_task_delay * avg_task_delay);
+      double task_duration = std::accumulate(hap_dur.begin(), hap_dur.end(), 0LL) / hap_dur.size();
+      sq_sum = std::inner_product(hap_dur.begin(), hap_dur.end(), hap_dur.begin(), 0.0);
+      double std_task_duration = std::sqrt(sq_sum / hap_delay.size() - task_duration * task_duration);
+      float period = avg_task_delay + task_duration;
+      float std_period = std_task_delay + std_task_duration;
+      float frequency = 1000000.0f / period;
+      float std_frequency = 1000000.0f / std_period;
+
+      std::cout 
+      <<" Test Results for Haptic Loop Profiling: " << num_loops << " iterations" << "\n"
+      <<" Average Delay: " << avg_task_delay << " \u00b1 " << std_task_delay << "us\n"
+      <<" Average Duration: " << task_duration << " \u00b1 " << std_task_duration << "us\n"
+      <<" Average Period: " << int(period) << " \u00b1 " << std_period << "us\n"
+      <<" Average Frequency: " << int(frequency) << " \u00b1 " << std_frequency << "Hz\n"
+      << std::endl;
+
+      // Enable regular task
+      HapticUpdate.enable();
+  }
+  #ifdef LIBMAPPER
+    bool libtOn() {
+      std::cout << "Start profiling task speed" << std::endl;
+      start_time[1] = micros();
+      end_time[1] = 0;
+
+      return true;
+    }
+
+    void libtOff() {
+        double avg_task_delay = std::accumulate(lib_delay.begin(), lib_delay.end(), 0.0) / lib_delay.size();
+        double sq_sum = std::inner_product(lib_delay.begin(), lib_delay.end(), lib_delay.begin(), 0.0);
+        double std_task_delay = std::sqrt(sq_sum / lib_delay.size() - avg_task_delay * avg_task_delay);
+        double task_duration = std::accumulate(lib_dur.begin(), lib_dur.end(), 0LL) / lib_dur.size();
+        sq_sum = std::inner_product(lib_dur.begin(), lib_dur.end(), lib_dur.begin(), 0.0);
+        double std_task_duration = std::sqrt(sq_sum / lib_delay.size() - task_duration * task_duration);
+        float period = avg_task_delay + task_duration;
+        float std_period = std_task_delay + std_task_duration;
+        float frequency = 1000000.0f / period;
+        float std_frequency = 1000000.0f / std_period;
+
+        std::cout 
+        <<" Test Results for Libmapper Loop Profiling: " << num_loops << " iterations" << "\n"
+        <<" Average Delay: " << avg_task_delay << " \u00b1 " << std_task_delay << "us\n"
+        <<" Average Duration: " << task_duration << " \u00b1 " << std_task_duration << "us\n"
+        <<" Average Period: " << int(period) << " \u00b1 " << std_period << "us\n"
+        <<" Average Frequency: " << int(frequency) << " \u00b1 " << std_frequency << "Hz\n"
+        << std::endl;
+
+        // Enable regular task
+        libmapperUpdate.enable();
+    }
+  #endif
+  #ifdef OSC
+    bool osctOn() {
+      std::cout << "Start profiling task speed" << std::endl;
+      start_time[2] = micros();
+      end_time[2] = 0;
+
+      return true;
+    }
+
+    void osctOff() {
+        double avg_task_delay = std::accumulate(osc_delay.begin(), osc_delay.end(), 0.0) / osc_delay.size();
+        double sq_sum = std::inner_product(osc_delay.begin(), osc_delay.end(), osc_delay.begin(), 0.0);
+        double std_task_delay = std::sqrt(sq_sum / osc_delay.size() - avg_task_delay * avg_task_delay);
+        double task_duration = std::accumulate(osc_dur.begin(), osc_dur.end(), 0LL) / osc_dur.size();
+        sq_sum = std::inner_product(osc_dur.begin(), osc_dur.end(), osc_dur.begin(), 0.0);
+        double std_task_duration = std::sqrt(sq_sum / osc_delay.size() - task_duration * task_duration);
+        float period = avg_task_delay + task_duration;
+        float std_period = std_task_delay + std_task_duration;
+        float frequency = 1000000.0f / period;
+        float std_frequency = 1000000.0f / std_period;
+
+        std::cout 
+        <<" Test Results for OSC Loop Profiling: " << OSC_loops << " iterations" << "\n"
+        <<" Average Delay: " << avg_task_delay << " \u00b1 " << std_task_delay << "us\n"
+        <<" Average Duration: " << task_duration << " \u00b1 " << std_task_duration << "us\n"
+        <<" Average Period: " << int(period) << " \u00b1 " << std_period << "us\n"
+        <<" Average Frequency: " << int(frequency) << " \u00b1 " << std_frequency << "Hz\n"
+        << std::endl;
+
+        //Enable regular task
+        OSCupdate.enable();
+    }
+  #endif
+#endif
+
+//*********************Wireless Function Callbacks*********************
 #ifdef LIBMAPPER
 void pollLibmapper() {
+  #ifdef DEBUG
+    // Get start time and time since last start
+    start_time[1] = micros();
+    task_delay[1] = (start_time - end_time);
+    // Skip first task_delay as it is not accurate
+    if (end_time[1] != 0) {
+      lib_delay.push_back(task_delay[1]);
+    }
+  #endif
+  // Poll libmapper and force update call
   mpr_dev_poll(dev, 0);
-}
-
-void updateLibmapper () {
-    // Update libmapper outputs
   mpr_sig_set_value(out_sig_angle, 0, 1, MPR_INT32, &knob.angle_out);
   mpr_sig_set_value(out_sig_velocity, 0, 1, MPR_FLT, &knob.velocity);
   mpr_sig_set_value(out_sig_trigger, 0, 1, MPR_INT32, &knob.trigger);
@@ -474,11 +620,57 @@ void updateLibmapper () {
   mpr_sig_set_value(out_sig_quant_angle, 0, 1, MPR_INT32, &knob.angle_discrete);
   mpr_sig_set_value(out_sig_acceleration, 0, 1, MPR_FLT, &knob.acceleration);
   mpr_dev_update_maps(dev);
+
+  #ifdef DEBUG
+    end_time[1] = micros();
+    task_dur[1] = end_time[1] - start_time[1];
+    lib_dur.push_back(task_dur[1]);
+  #endif
 }
 #endif
 
+#ifdef OSC
+void updateOSC() {
+  #ifdef DEBUG
+    // Get start time and time since last start
+    start_time[2] = micros();
+    task_delay[2] = (start_time[2] - end_time[2]);
+    // Skip first task_delay as it is not accurate
+    if (end_time[2] != 0) {
+      osc_delay.push_back(task_delay[2]);
+    }
+  #endif
+  // Sending continuous OSC messages
+  if (puara.IP1_ready()) {
+        oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/angle_out");
+        lo_send(osc1, oscNamespace.c_str(), "i", knob.angle_out);
+        oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/velocity");
+        lo_send(osc1, oscNamespace.c_str(), "f", knob.velocity);
+        oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/trigger");
+        lo_send(osc1, oscNamespace.c_str(), "i", knob.trigger);
+        oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/speed");
+        float speed = abs(knob.velocity);
+        lo_send(osc1, oscNamespace.c_str(), "f", speed);
+        oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/angle_discrete");
+        lo_send(osc1, oscNamespace.c_str(), "i", knob.angle_discrete);
+        oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/accl");
+        lo_send(osc1, oscNamespace.c_str(), "f", knob.acceleration);
+  }
+
+  #ifdef DEBUG
+    // Compute duration
+    end_time[2] = micros();
+    task_dur[2] = end_time[2] - start_time[2];
+    osc_dur.push_back(task_dur[2]);
+  #endif
+}
+#endif
+
+
+//*********************LCD Function Callbacks*********************
 #ifdef VISUAL_FEEDBACK
 void updateDisplay() {
+  // Update LCD
   if ((gui_state == 0) && ((STATE != OLD_STATE) || (old_gui_state != gui_state))){
     if (old_gui_state != gui_state) {
       old_gui_state = 0;
@@ -490,8 +682,8 @@ void updateDisplay() {
     lcd.clear();
     lcd.print("Haptic Effect");
     print_state(STATE); 
-
   }
+  DisplayUpdate.setCallback(&readInputs);
 }
 
 void readInputs() {
@@ -503,67 +695,55 @@ void readInputs() {
       OLD_STATE = STATE;
       STATE = CHANGE_STATE(STATE,MAX_MOTOR_STATES,1);
       knob.set_mode(STATE);
+      #ifndef VISUAL_FEEDBACK
+        knob.print_mode(STATE);
+      #endif
+      DisplayUpdate.setCallback(&updateDisplay);
+      DisplayUpdate.forceNextIteration();
     }
     if (buttons & BUTTON_LEFT) {
       OLD_STATE = STATE;
       STATE = CHANGE_STATE(STATE,MAX_MOTOR_STATES,0);
       knob.set_mode(STATE);
+      DisplayUpdate.setCallback(&updateDisplay);
+      DisplayUpdate.forceNextIteration();
     }
   }
 }
 #endif
 
+//*********************Haptic Function Callbacks*********************
 void updateHaptics() {
+  #ifdef DEBUG
+    // Get start time and time since last start
+    start_time[0] = micros();
+    task_delay[0] = (start_time[0] - end_time[0]);
+    // Skip first task_delay as it is not accurate
+    if (end_time[0] != 0) {
+      hap_delay.push_back(task_delay[0]);
+    }
+  #endif
   // Recieve Angle and velocity from servo
-    err = receiveI2C(&knob);
-    if (err) {
-      //printf("i2c error \n");
+  i2c_err = receiveI2C(&knob);
+  if (i2c_err) {
+    //printf("i2c error \n");
+  }
+  else {
+    // Update torque if valid angle measure is recieved.
+    if (is_playing) {
+      knob.update();
+    } else { 
+      // OBS: Consider not updating? assign last last value instead? //
+      knob.torque = 0;
+      knob.target_velocity = 0;
     }
-    else {
-      // Update torque if valid angle measure is recieved.
-      if (is_playing) {
-        knob.update();
-      } else { 
-        // OBS: Consider not updating? assign last last value instead? //
-        knob.torque = 0;
-        knob.target_velocity = 0;
-      }
-      sendI2C(&knob);
-    }
-}
-
-void updateOSC() {
-  // Sending continuous OSC messages
-    if (puara.IP1_ready()) {
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/angle_out");
-          lo_send(osc1, oscNamespace.c_str(), "i", knob.angle_out);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/velocity");
-          lo_send(osc1, oscNamespace.c_str(), "f", knob.velocity);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/trigger");
-          lo_send(osc1, oscNamespace.c_str(), "i", knob.trigger);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/speed");
-          float speed = abs(knob.velocity);
-          lo_send(osc1, oscNamespace.c_str(), "f", speed);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/angle_discrete");
-          lo_send(osc1, oscNamespace.c_str(), "i", knob.angle_discrete);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/accl");
-          lo_send(osc1, oscNamespace.c_str(), "f", knob.acceleration);
-    }
-    if (puara.IP2_ready()) {
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/angle_out");
-          lo_send(osc1, oscNamespace.c_str(), "i", knob.angle_out);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/velocity");
-          lo_send(osc1, oscNamespace.c_str(), "f", knob.velocity);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/trigger");
-          lo_send(osc1, oscNamespace.c_str(), "i", knob.trigger);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/speed");
-          float speed = abs(knob.velocity);
-          lo_send(osc1, oscNamespace.c_str(), "f", speed);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/angle_discrete");
-          lo_send(osc1, oscNamespace.c_str(), "i", knob.angle_discrete);
-          oscNamespace.replace(oscNamespace.begin()+baseNamespace.size(),oscNamespace.end(), "instrument/accl");
-          lo_send(osc1, oscNamespace.c_str(), "f", knob.acceleration);
-    }
+    sendI2C(&knob);
+  }
+  #ifdef DEBUG
+    end_time[0] = micros();
+    task_dur[0] = end_time[0] - start_time[0];
+    hap_dur.push_back(task_dur[0]);
+  #endif
 }
 
 // Set up multithreading
@@ -608,8 +788,6 @@ void createCoreTasks() {
 }
 
 
-
-
 //*************************************SETUP*************************************//
 void setup() {
   #ifdef VISUAL_FEEDBACK
@@ -619,7 +797,7 @@ void setup() {
   #endif
 
   // // Start serial
-  // Serial.begin(115200);
+  //Serial.begin(115200);
 
   // Start Puara
   puara.start();
@@ -628,6 +806,7 @@ void setup() {
   baseNamespace.append("/");
   oscNamespace = baseNamespace;
 
+  #ifdef OSC
   // Populating liblo addresses and server port
   std::cout << "    Initializing Liblo server/client... ";
   osc1 = lo_address_new(puara.getIP1().c_str(), puara.getPORT1Str().c_str());
@@ -638,6 +817,7 @@ void setup() {
   lo_server_thread_add_method(osc_server, NULL, NULL, generic_handler, NULL);
   lo_server_thread_start(osc_server);
   std::cout << "done" << std::endl;
+  #endif
 
 
   #ifdef LIBMAPPER
@@ -684,12 +864,17 @@ void setup() {
   Serial.println("Edu Meneses\nMetalab - Société des Arts Technologiques (SAT)\nIDMIL - CIRMMT - McGill University");
   Serial.print("Firmware version: "); Serial.println(firmware_version); Serial.println("\n");
   
+  // If debug mode is not selected, enable all regular tasks
+  #ifndef DEBUG
+    runnerComms.enableAll();
+    runnerHaptics.enableAll();
+  #endif
+
   // Create tasks
   createCoreTasks();
-
 }
 
 void loop() {
-  //runnerHaptics.execute();
-  //runnerComms.execute();
+  // runnerHaptics.execute();
+  // runnerComms.execute();
 }

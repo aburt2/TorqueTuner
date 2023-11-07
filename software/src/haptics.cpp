@@ -75,7 +75,7 @@ void TorqueTuner::set_mode(int mode_idx) {
 		// Init discrete angle
 		// float resolution = active_mode->max / stretch;
 		// angle_discrete = floor(floor(angle_out / resolution) * resolution);
-		print_mode(static_cast<MODE>(mode_idx));
+		// print_mode(static_cast<MODE>(mode_idx));
 	}
 }
 

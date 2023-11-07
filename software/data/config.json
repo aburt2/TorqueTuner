@@ -6,7 +6,7 @@
     "APpasswd": "mappings",
     "wifiSSID": "t-stick_network",
     "wifiPSK": "mappings",
-    "persistentAP": 1,
+    "persistentAP": 0,
     "oscIP1": "192.168.137.1",
     "oscPORT1": 8000,
     "oscIP2": "192.168.0.100",
