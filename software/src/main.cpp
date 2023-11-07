@@ -433,7 +433,7 @@ const uint32_t LIBMAPPER_POLL_RATE = 2000; // 500Hz
 const uint32_t OSC_UPDATE_RATE = 40000; // 25Hz
 const uint32_t HAPTICS_UPDATE_RATE = 500; // 2KHz
 const uint32_t I2CUPDATE_FREQ = 3400000; // High Speed I2C mode;
-const uint32_t INPUT_READ_RATE = 50000; // 20Hz
+const uint32_t INPUT_READ_RATE = 100000; // 10Hz
 
 // Error variable for I2C error
 int i2c_err = 0;
@@ -443,8 +443,12 @@ int start_time[3] = { 0, 0, 0};
 int end_time[3] = { 0, 0, 0};
 int num_loops = 10000;
 int OSC_loops = 1000;
+int task_period[3] = { 0, 0, 0};
 int task_delay[3] = { 0, 0, 0};
 int task_dur[3] = { 0, 0, 0};
+std::vector<int> hap_period = {};
+std::vector<int> lib_period = {};
+std::vector<int> osc_period = {};
 std::vector<int> hap_delay = {};
 std::vector<int> lib_delay = {};
 std::vector<int> osc_delay = {};
@@ -508,23 +512,29 @@ Task DisplayUpdate (INPUT_READ_RATE,TASK_FOREVER,&readInputs, &runnerHaptics,tru
   }
 
   void haptOff() {
+      // Calculate average delay of task
       double avg_task_delay = std::accumulate(hap_delay.begin(), hap_delay.end(), 0.0) / hap_delay.size();
       double sq_sum = std::inner_product(hap_delay.begin(), hap_delay.end(), hap_delay.begin(), 0.0);
       double std_task_delay = std::sqrt(sq_sum / hap_delay.size() - avg_task_delay * avg_task_delay);
-      double task_duration = std::accumulate(hap_dur.begin(), hap_dur.end(), 0LL) / hap_dur.size();
+      // Calculate average duration of task
+      double task_duration = std::accumulate(hap_dur.begin(), hap_dur.end(), 0.0) / hap_dur.size();
       sq_sum = std::inner_product(hap_dur.begin(), hap_dur.end(), hap_dur.begin(), 0.0);
-      double std_task_duration = std::sqrt(sq_sum / hap_delay.size() - task_duration * task_duration);
-      float period = avg_task_delay + task_duration;
-      float std_period = std_task_delay + std_task_duration;
-      float frequency = 1000000.0f / period;
-      float std_frequency = 1000000.0f / std_period;
+      double std_task_duration = std::sqrt((sq_sum / hap_dur.size()) - (task_duration * task_duration));
+      
+      // Calculate average period of task
+      double period = std::accumulate(hap_period.begin(), hap_period.end(), 0.0) / hap_period.size();
+      sq_sum = std::inner_product(hap_period.begin(), hap_period.end(), hap_period.begin(), 0.0);
+      double std_period = std::sqrt((sq_sum / hap_period.size()) - (period * period));
+      // Calculate average frequency of task
+      double frequency = 1000000.0f / period;
+      double std_frequency = frequency - (1000000.0f / (period + std_period));
 
       std::cout 
       <<" Test Results for Haptic Loop Profiling: " << num_loops << " iterations" << "\n"
       <<" Average Delay: " << avg_task_delay << " \u00b1 " << std_task_delay << "us\n"
       <<" Average Duration: " << task_duration << " \u00b1 " << std_task_duration << "us\n"
-      <<" Average Period: " << int(period) << " \u00b1 " << std_period << "us\n"
-      <<" Average Frequency: " << int(frequency) << " \u00b1 " << std_frequency << "Hz\n"
+      <<" Average Period: " << period << " \u00b1 " << std_period << "us\n"
+      <<" Average Frequency: " << frequency << " \u00b1 " << std_frequency << "Hz\n"
       << std::endl;
 
       // Enable regular task
@@ -540,23 +550,28 @@ Task DisplayUpdate (INPUT_READ_RATE,TASK_FOREVER,&readInputs, &runnerHaptics,tru
     }
 
     void libtOff() {
+        // Calculate average Delay of task
         double avg_task_delay = std::accumulate(lib_delay.begin(), lib_delay.end(), 0.0) / lib_delay.size();
         double sq_sum = std::inner_product(lib_delay.begin(), lib_delay.end(), lib_delay.begin(), 0.0);
         double std_task_delay = std::sqrt(sq_sum / lib_delay.size() - avg_task_delay * avg_task_delay);
+        // Calculate average duration of task
         double task_duration = std::accumulate(lib_dur.begin(), lib_dur.end(), 0LL) / lib_dur.size();
         sq_sum = std::inner_product(lib_dur.begin(), lib_dur.end(), lib_dur.begin(), 0.0);
-        double std_task_duration = std::sqrt(sq_sum / lib_delay.size() - task_duration * task_duration);
-        float period = avg_task_delay + task_duration;
-        float std_period = std_task_delay + std_task_duration;
-        float frequency = 1000000.0f / period;
-        float std_frequency = 1000000.0f / std_period;
+        double std_task_duration = std::sqrt(sq_sum / lib_dur.size() - task_duration * task_duration);
+        // Calculate average period of task
+        double period = std::accumulate(lib_period.begin(), lib_period.end(), 0.0) / lib_period.size();
+        sq_sum = std::inner_product(lib_period.begin(), lib_period.end(), lib_period.begin(), 0.0);
+        double std_period = std::sqrt(sq_sum / lib_period.size() - period * period);
+        // Calculate average frequency
+        double frequency = 1000000.0f / period;
+        double std_frequency = frequency - (1000000.0f / (period + std_period));
 
         std::cout 
         <<" Test Results for Libmapper Loop Profiling: " << num_loops << " iterations" << "\n"
         <<" Average Delay: " << avg_task_delay << " \u00b1 " << std_task_delay << "us\n"
         <<" Average Duration: " << task_duration << " \u00b1 " << std_task_duration << "us\n"
-        <<" Average Period: " << int(period) << " \u00b1 " << std_period << "us\n"
-        <<" Average Frequency: " << int(frequency) << " \u00b1 " << std_frequency << "Hz\n"
+        <<" Average Period: " << period << " \u00b1 " << std_period << "us\n"
+        <<" Average Frequency: " << frequency << " \u00b1 " << std_frequency << "Hz\n"
         << std::endl;
 
         // Enable regular task
@@ -573,23 +588,28 @@ Task DisplayUpdate (INPUT_READ_RATE,TASK_FOREVER,&readInputs, &runnerHaptics,tru
     }
 
     void osctOff() {
+        // Calculate average delay of task
         double avg_task_delay = std::accumulate(osc_delay.begin(), osc_delay.end(), 0.0) / osc_delay.size();
         double sq_sum = std::inner_product(osc_delay.begin(), osc_delay.end(), osc_delay.begin(), 0.0);
         double std_task_delay = std::sqrt(sq_sum / osc_delay.size() - avg_task_delay * avg_task_delay);
+        // Calculate average duration of task
         double task_duration = std::accumulate(osc_dur.begin(), osc_dur.end(), 0LL) / osc_dur.size();
         sq_sum = std::inner_product(osc_dur.begin(), osc_dur.end(), osc_dur.begin(), 0.0);
         double std_task_duration = std::sqrt(sq_sum / osc_delay.size() - task_duration * task_duration);
-        float period = avg_task_delay + task_duration;
-        float std_period = std_task_delay + std_task_duration;
-        float frequency = 1000000.0f / period;
-        float std_frequency = 1000000.0f / std_period;
+        // Calculate average period of task
+        double period = std::accumulate(osc_period.begin(), osc_period.end(), 0.0) / osc_period.size();
+        sq_sum = std::inner_product(osc_period.begin(), osc_period.end(), osc_period.begin(), 0.0);
+        double std_period = std::sqrt(sq_sum / osc_period.size() - period * period);
+        // Calculate average frequency of task
+        double frequency = 1000000.0f / period;
+        double std_frequency = frequency - (1000000.0f / (period + std_period));
 
         std::cout 
         <<" Test Results for OSC Loop Profiling: " << OSC_loops << " iterations" << "\n"
         <<" Average Delay: " << avg_task_delay << " \u00b1 " << std_task_delay << "us\n"
         <<" Average Duration: " << task_duration << " \u00b1 " << std_task_duration << "us\n"
-        <<" Average Period: " << int(period) << " \u00b1 " << std_period << "us\n"
-        <<" Average Frequency: " << int(frequency) << " \u00b1 " << std_frequency << "Hz\n"
+        <<" Average Period: " << period << " \u00b1 " << std_period << "us\n"
+        <<" Average Frequency: " << frequency << " \u00b1 " << std_frequency << "Hz\n"
         << std::endl;
 
         //Enable regular task
@@ -603,11 +623,16 @@ Task DisplayUpdate (INPUT_READ_RATE,TASK_FOREVER,&readInputs, &runnerHaptics,tru
 void pollLibmapper() {
   #ifdef DEBUG
     // Get start time and time since last start
-    start_time[1] = micros();
-    task_delay[1] = (start_time - end_time);
+    // Measure the time since the last start
+    int debug_now = micros();
+    task_period[1] = debug_now - start_time[1];
+    // Measure the delay since the end of the last task
+    start_time[1] = debug_now;
+    task_delay[1] = (start_time[1] - end_time[1]);
     // Skip first task_delay as it is not accurate
     if (end_time[1] != 0) {
       lib_delay.push_back(task_delay[1]);
+      lib_period.push_back(task_period[1]);
     }
   #endif
   // Poll libmapper and force update call
@@ -633,11 +658,16 @@ void pollLibmapper() {
 void updateOSC() {
   #ifdef DEBUG
     // Get start time and time since last start
-    start_time[2] = micros();
+    // Measure the time since the last start
+    int debug_now = micros();
+    task_period[2] = debug_now - start_time[2];
+    // Measure the delay since the end of the last task
+    start_time[2] = debug_now;
     task_delay[2] = (start_time[2] - end_time[2]);
     // Skip first task_delay as it is not accurate
     if (end_time[2] != 0) {
       osc_delay.push_back(task_delay[2]);
+      osc_period.push_back(task_period[2]);
     }
   #endif
   // Sending continuous OSC messages
@@ -714,13 +744,18 @@ void readInputs() {
 
 //*********************Haptic Function Callbacks*********************
 void updateHaptics() {
+  // Get start time and time since last start
+  // Measure the time since the last start
+  int debug_now = micros();
+  task_period[0] = debug_now - start_time[0];
+  // Measure the delay since the end of the last task
+  start_time[0] = debug_now;
+  task_delay[0] = (start_time[0] - end_time[0]);
   #ifdef DEBUG
-    // Get start time and time since last start
-    start_time[0] = micros();
-    task_delay[0] = (start_time[0] - end_time[0]);
     // Skip first task_delay as it is not accurate
     if (end_time[0] != 0) {
       hap_delay.push_back(task_delay[0]);
+      hap_period.push_back(task_period[0]);
     }
   #endif
   // Recieve Angle and velocity from servo
@@ -739,11 +774,23 @@ void updateHaptics() {
     }
     sendI2C(&knob);
   }
+  // Compute duration
+  end_time[0] = micros();
+  task_dur[0] = end_time[0] - start_time[0];
+  int tmp_delay = HAPTICS_UPDATE_RATE - task_dur[0] - 70;
+  if (tmp_delay < 0) tmp_delay = 0;
   #ifdef DEBUG
     end_time[0] = micros();
     task_dur[0] = end_time[0] - start_time[0];
     hap_dur.push_back(task_dur[0]);
+    // if (HapticDebug.isEnabled()) {
+    //   HapticDebug.delay(tmp_delay);
+    // }
   #endif
+  // Delay next iteration so that it meets the haptic rate
+  // if (HapticUpdate.isEnabled()) {
+  //   HapticUpdate.delay(tmp_delay);
+  // }
 }
 
 // Set up multithreading
